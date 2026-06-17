@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# dbt
+dbt_project/logs/
+dbt_project/target/
+dbt_packages/
+
+# Data
+data/exports/*.parquet
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

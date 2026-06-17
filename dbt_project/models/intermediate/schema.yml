@@ -1,0 +1,11 @@
+version: 2
+
+models:
+  - name: int_delivery_analysis
+    columns:
+      - name: delivery_delay_days
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -30
+              max_value: 90
+              severity: warn
