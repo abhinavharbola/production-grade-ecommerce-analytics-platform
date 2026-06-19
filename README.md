@@ -21,6 +21,23 @@ Raw CSVs -> DuckDB -> dbt (staging -> intermediate -> marts) -> Parquet -> Strea
 - **Visualization:** Streamlit app reads exclusively from Parquet files (zero live database queries)
 - **Orchestration:** GitHub Actions workflow runs the full pipeline on push
 
+## Dashboard Previews
+
+### Revenue Trend
+![Revenue Trend](assets/revenue_trend.png)
+
+### Cohort Retention Heatmap
+![Cohort Retention](assets/cohort_retention.png)
+
+### Category Performance
+![Category Performance](assets/category_performance.png)
+
+### Delivery Delay vs Review Score
+![Delivery Delay](assets/delivery_delay.png)
+
+### CLV by Acquisition Cohort
+![CLV by Cohort](assets/clv_by_cohort.png)
+
 ## Schema Design
 
 Star schema with strict grain separation to prevent aggregation errors:
@@ -36,16 +53,28 @@ Star schema with strict grain separation to prevent aggregation errors:
 
 The `fact_order_items` table is configured for incremental processing using dbt's `is_incremental()` macro, demonstrated in `mart_revenue_monthly_incremental`.
 
+## Tech Stack
+
+| Component | Technology | Version |
+|---|---|---|
+| OLAP Engine | DuckDB | 0.10.2 |
+| Transformation | dbt-core + dbt-duckdb | 1.7.11 / 1.7.4 |
+| Data Quality | dbt-expectations | 0.10.4 |
+| Orchestration | GitHub Actions | ubuntu-latest |
+| Visualization | Streamlit + Plotly | 1.32.0 / 5.19.0 |
+| Output Format | Parquet (PyArrow) | 15.0.0 |
+| Language | Python | 3.11+ |
+
 ## Project Structure
 
 ```
 ecommerce-analytics/
 ├── .github/
 │   └── workflows/
-│       └── elt_pipeline.yml              # CI/CD pipeline
-├── assets/                                # ERD and static assets
+│       └── elt_pipeline.yml               # CI/CD pipeline
+├── assets/                                # Screenshots and static assets
 ├── data/
-│   ├── raw/                               # Olist CSVs (not committed)
+│   ├── raw/                               # Olist CSVs
 │   └── exports/                           # Parquet output from pipeline
 ├── dbt_project/
 │   ├── models/
@@ -73,13 +102,14 @@ ecommerce-analytics/
 
 - Python 3.11+
 - Git
+- Git LFS
 - Olist Brazilian E-Commerce dataset from [Kaggle](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)
 
 ### Step 1: Clone and Set Up Environment
 
 ```bash
-git clone <repo-url>
-cd ecommerce-analytics-platform
+git clone https://github.com/abhinavharbola/production-grade-ecommerce-analytics-platform.git
+cd production-grade-ecommerce-analytics-platform
 python -m venv venv
 source venv/bin/activate          # macOS/Linux
 venv\Scripts\activate             # Windows
@@ -111,37 +141,22 @@ dbt deps
 cd ..
 ```
 
-This installs `dbt-expectations` from the dbt Hub.
-
 ### Step 4: Run the Pipeline
 
+**Linux/macOS:**
 ```bash
+bash scripts/run_pipeline.sh
+```
+
+**Windows (PowerShell):**
+```powershell
 cd dbt_project
 dbt build --profiles-dir .
 cd ..
-```
-
-All 38 tasks run: 9 staging views, 5 intermediate tables, 6 mart tables, 1 incremental model, and 17 data tests.
-
-### Step 5: Export Marts to Parquet
-
-```bash
 python scripts/export_marts.py
 ```
 
-Verifies that `data/exports/` contains:
-
-```
-data/exports/
-├── mart_revenue_monthly.parquet
-├── mart_cohort_retention.parquet
-├── mart_clv.parquet
-├── mart_category_performance.parquet
-├── mart_seller_performance.parquet
-└── mart_delivery_reviews.parquet
-```
-
-### Step 6: Launch Dashboard
+### Step 5: Launch Dashboard
 
 ```bash
 streamlit run app/app.py
@@ -158,17 +173,15 @@ Two-tier approach defined in `schema.yml` files:
 | **Errors** | `unique`, `not_null` | All primary keys and composite keys | Hard fail; pipeline halts |
 | **Warnings** | `dbt-expectations` | Business logic (review scores 1-5, delivery delay -30 to +90 days) | Soft fail; warning logged, pipeline continues |
 
-The delivery delay warning firing 2,399 results is expected: the Olist dataset contains genuine outliers. The pipeline surfaces them without breaking.
-
 ## Dashboard Views
-
-Five views in the Streamlit app, all reading from pre-compiled Parquet files:
 
 1. **Revenue Trend:** Monthly revenue line chart with summary metrics
 2. **Cohort Retention Heatmap:** Dense retention matrix with zero-sales months preserved
 3. **Category Performance:** Scatter plot of revenue vs review score by product category
-4. **Delivery Delay vs Review Score:** Bar chart showing review score degradation by delivery delay bucket
+4. **Delivery Delay vs Review Score:** Bar chart showing review score degradation by delay bucket
 5. **CLV by Acquisition Cohort:** Bar chart of average annualized CLV per cohort
+
+All views read exclusively from pre-compiled Parquet files. Zero live database queries.
 
 ## Business Findings
 
@@ -196,24 +209,12 @@ The top 10 percent of sellers (`gmv_decile = 1`) account for approximately 55-65
 
 *Source: `mart_seller_performance` aggregated by `gmv_decile`*
 
-## Tech Stack
-
-| Component | Technology | Version |
-|---|---|---|
-| OLAP Engine | DuckDB | 0.10.2 |
-| Transformation | dbt-core + dbt-duckdb | 1.7.11 / 1.7.4 |
-| Data Quality | dbt-expectations | 0.10.4 |
-| Orchestration | GitHub Actions | ubuntu-latest |
-| Visualization | Streamlit + Plotly | 1.32.0 / 5.19.0 |
-| Output Format | Parquet (PyArrow) | 15.0.0 |
-| Language | Python | 3.11+ |
-
 ## CI/CD Pipeline
 
-The GitHub Actions workflow (`.github/workflows/elt_pipeline.yml`) triggers on every push to `main`:
+The GitHub Actions workflow triggers on every push to `main`:
 
-1. Checks out repository
+1. Checks out repository (with Git LFS)
 2. Sets up Python 3.11
 3. Installs dependencies from `requirements.txt`
-4. Runs `scripts/run_pipeline.sh` (dbt deps, dbt build, Parquet export)
-5. Uploads Parquet artifacts for deployment
+4. Runs `dbt deps`, `dbt build`, and Parquet export
+5. Uploads Parquet artifacts
